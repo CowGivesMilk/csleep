@@ -20,7 +20,7 @@ use std::io::{self, Write};
 use std::process;
 use std::thread;
 use std::time::{Duration, Instant};
-
+use terminal_size::{Width, terminal_size};
 const USAGE: &str = "Usage: csleep Number[Suffix]
 or: csleep OPTION
 Pause for NUMBER seconds, where NUMBER is an integer or floating-point.
@@ -38,7 +38,7 @@ With multiple arguments, pause for the sum of their values.
 const AUTHOR: &str = "Nimesh Poudel";
 const LICENSE: &str = include_str!("../LICENSE.txt");
 
-const BAR_WIDTH: usize = 40;
+//const BAR_WIDTH: usize = 40;
 // Eighth-block characters give 8 sub-steps per cell for a smoother bar.
 const PARTIAL: [char; 8] = [' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
 
@@ -87,9 +87,20 @@ fn fmt_hms(secs: u64) -> String {
     )
 }
 
+/// Width of the progress bar, leaving room for " XXX%  HH:MM:SS left".
+fn bar_width() -> usize {
+    const RESERVED: usize = 22; // " 100%  00:00:00 left"
+    const MIN_WIDTH: usize = 10;
+    const FALLBACK: usize = 40;
+
+    match terminal_size() {
+        Some((Width(w), _)) => (w as usize).saturating_sub(RESERVED).max(MIN_WIDTH),
+        None => FALLBACK, // not a TTY, redirected, etc.
+    }
+}
 fn draw_bar(elapsed: Duration, total: Duration) {
     let frac = (elapsed.as_secs_f64() / total.as_secs_f64()).clamp(0.0, 1.0);
-    let cells = frac * BAR_WIDTH as f64;
+    let cells = frac * bar_width() as f64;
     let full = cells.floor() as usize;
     let part = ((cells - full as f64) * 8.0) as usize;
 
@@ -98,7 +109,7 @@ fn draw_bar(elapsed: Duration, total: Duration) {
         bar.push(PARTIAL[part]);
     }
     let used = full + usize::from(part > 0);
-    bar.push_str(&"░".repeat(BAR_WIDTH - used));
+    bar.push_str(&"░".repeat(bar_width() - used));
 
     let left = total.saturating_sub(elapsed).as_secs_f64().ceil() as u64;
     eprint!(
